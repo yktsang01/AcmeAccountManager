@@ -1,0 +1,68 @@
+Problem statement:
+
+Story 1) As a customer I would like to get the balance of my account
+
+Story 2) As a customer I would like to be able to transfer an amount in HKD from one account to another account
+
+ 
+
+Assumptions:
+
+- Name of the company is acmebank, and the name of the service you are implementing is account-manager (use those names for your packages)
+
+- Those accounts already exists: 12345678, and 88888888. Each of them have an initial balance of 1,000,000 HKD
+
+- As a customer I should be able to get balance of those accounts, and transfer money between those accounts
+
+- All amounts are in HKD
+
+ 
+
+Technology stack:
+
+- we want a rest api
+
+- programming language preference with Java or Kotlin
+
+- preference with Springboot framework, which is the framework Mox is now using
+
+- provide a simple way to build the project in one click (preference gradle or maven)
+
+- Use h2 database so the balance can be persisted on disk in a local file (if I restart the service I should be able to get the last balance of the accounts)
+
+- Use a public repository (like github, gitlab, bitbucket, etc) to commit your source code
+
+ 
+
+Evaluation criteria:
+
+- solution must build
+
+- solution must do what is asked
+
+- solution must follow best practices
+
+ 
+
+Advices
+
+- Don't overengineer only because it is an interview. Keep it simple, as we don't want you to spend days on this assessment
+
+- Don't overengineer the test neither only because it is an interview. Do right amount of test to make you confident your code is working and ready for production
+
+- Pretend it is a real life working in your company. How will you handle those 2 stories prioritized in current sprint?
+
+- You can take as much time as you want, but earlier you submit it, earlier we will process your case
+
+ 
+
+Submitting your solution
+
+- Commit your source code in a public repository of your choice (example: github, gitlab, bitbucket)
+
+- Make sure I can open the project in IntelliJ (if you choose java language, should be ok if you use gradle or maven)
+
+- Make sure you didn't use any of those names in your code before you commit: mox, moxbank, standard chartered, sc, scb, etc.
+
+- Please submit your solution by REPLY ALL in this email
+

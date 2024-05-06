@@ -1,0 +1,229 @@
+Table of Contents
+0. Assumptions
+1. Project Structure
+2. Database Entities
+3. Security Configuration
+4. Endpoints
+5. Account Balance API
+6. Transfer API
+7. Testing
+
+
+
+
+0. Assumptions
+
+Users are logged in before the APIs are called.
+
+JSON web token (JWT) is used for authentication. This JWT is embedded in the API request header when calling APIs.
+
+
+
+
+1. Project Structure
+
+Spring Boot, Maven, and Java is used for the project. The project structure is straight-forward, following a 3-tier setup and purpose. 
+The root package is com.acmebank.accountmanager
+The sub-packages are as follow:
+a) config = configuration setup
+b) controller = the controllers 
+c) entity = database entities and repositories
+d) request = API requests
+e) response = API responses
+
+Given APIs are needed, Swagger UI is incorporated. 
+
+Since H2 database is used, the schema and data creation is included during startup. The SQL files for schema and data are located under "resources" such that Spring can pick up these files and initialize the database accordingly. 
+
+The data is created (inserted) only if there is no existing record in the table. I used the "insert ... where not exists ..." syntax to achieve this. If the regular insert statement was used, it will try to insert again during initialization/ startup. If the merge statement was used, it will try to update to the original data resetting everything.
+
+The H2 database also needs to be persistent, hence I configured it to host under the project's data folder. The database schema is "acctmgrdb".
+Datasource URL = jdbc:h2:file:./data/acctmgrdb
+Username = sa
+Password = password
+
+I used embedded Tomcat to run the application.
+
+
+
+2. Database Entities
+
+Given sample accounts with balances are already provided, the relevant database tables created are as follow:
+a) account_balance = stores the account balances of customers
+b) transfer_transaction = stores the transactions whenever customers make a transfer
+
+Since only HKD is supported, the primary key for the table "account_balance" is the customer ID. Yet I included the currency as well for transparency purposes. Such that if multiple currencies need to be supported in the future, the table will have the relevant data. Also the primary key will need to be updated to include the currency.
+Single currency primary key => customer_id
+Multiple currencies primary key => customer_id, currency
+
+For the table "transfer_transaction", the primary key is an auto-increment ID. The transaction datetime is stored along with the source customer ID, destination customer ID, and the corresponding currency and amount.
+
+The amount data type is BigDecimal so that there is no loss in the precision during calculation. I declared the amount column as 4 decimal places because a) multiple currencies can be supported and b) some currencies can go up to 4 decimal places.
+
+
+
+
+
+3. Security Configuration 
+
+Given REST APIs are needed, security is one of the key concerns. Spring Security is used to leverage the configuration.
+
+The security configuration is located in com.acmebank.accountmanager.config.AcmeAccountManagerSecurityConfiguration
+
+Normally, JSON web token (JWT) is required to call APIs. With this project, JWT authenication is ommitted meaning I assume the caller (user) is logged in before calling APIs. However, implementing JWT authentication will mean additional "login" API. With this assumption, the CSFR is disabled in Spring Security.
+
+                .csrf(AbstractHttpConfigurer::disable)
+
+Furthermore, H2 database is used and I have enabled the H2 database console (user interface). By default, Spring does not allow embedded iframes hence I disabled the "frame option config" in the Spring Security.
+
+                .headers(httpSecurityHeadersConfigurer -> 
+                httpSecurityHeadersConfigurer.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable))
+
+There are several endpoints, all need authorized access hence using Spring Security I have permitted all for this project. In reality, authentication mechanism is configured and the actual REST API endpoints should be authenticated.
+
+                .authorizeHttpRequests((auth) -> auth.requestMatchers(
+                // list of endpoints
+                ).permitAll())
+
+Lastly statelessness is enforced for session management since this is API.
+
+               .sessionManagement((sess) -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+ 
+
+
+
+
+
+4. Endpoints
+
+There are several endpoints:
+a) Swagger UI => / or /api 
+b) get account balance for customer REST API (HTTP GET) => /api/v1/balances/{cid}
+c) transfer fund REST API (HTTP POST) => /api/v1/transfer
+d) H2 console => /h2-console
+e) actuator => /actuator
+
+The actuator is included for completeness, allowing application monitoring.
+
+The 2 REST APIs follow best practices accordingly, such as:
+- requests and responses are JSON format
+- appropriate HTTP response codes, along with the body if any, are returned
+- naming uses (plural) nouns rather then verbs
+- versioning such that the API version is in the header or URL
+
+The APIs uses RequestEntity and ResponseEntity such that the request and response can have all the necessary information available from the header and body.
+
+
+
+
+
+5. Account Balance API
+
+Account balance API uses HTTP GET and the customer ID ({cid} in the URL) as the path variable. This API returns the currency and amount accordingly upon success (HTTP 200) or an error message upon failure (HTTP 400 or HTTP 404).
+
+2 failure HTTP codes are applicable for the account balance API. HTTP 400 is returned if the customer ID is not provided (null or empty) with an error message. If the provided customer ID is not found then HTTP 404 is returned with an error message. If JWT is implemented, HTTP 401 (unauthorized) shall also be included.
+
+GET /api/v1/balances/{cid}
+
+Examples:
+GET /api/balances/12345678
+HTTP 200
+{
+  "currency": "HKD",
+  "balance": 1000000
+}
+
+GET /api/v1/balances/77777777
+HTTP 404
+{
+  "errorMessage": "Account balance not found for customer ID 77777777"
+}
+
+
+
+
+6. Transfer API
+
+Transfer API uses HTTP POST and the request body has the source and destination customer IDs along with the currency and amount.
+
+{
+  "sourceCustomerId": "string",
+  "destinationCustomerId": "string",
+  "transferCurrency": "string",
+  "transferAmount": 0
+}
+
+The response is a copy of the transfer transaction with the datetime and status. Behind the scene, it will get the source and destination account balances, add or subtract accordingly, update the "account_balance" table and create a record in the "transfer_transaction" table. This API requires transaction management, which is handled by Spring through the @Transactional annotation.
+
+Upon failure, HTTP 400, HTTP 404 or HTTP 406 can be returned. 
+HTTP 400 (bad request) is used for validation errors and invalid requests. Validation included:
+- empty request
+- any null parameters
+- any empty parameters
+- source and destination cannot be the same
+- currency is not "HKD" (case insensitive) (included because only single currency)
+- amount is zero (0) or negative
+
+HTTP 404 (not found) is returned when the source or destination is not found.
+
+HTTP 406 (not acceptable) is returned when a) the currency of the source and destination accounts do not match (would not happen in this project) or b) there is insufficient funds in the source account.
+
+If JWT is implemented, HTTP 401 (unauthorized) shall also be included.
+
+
+Examples:
+POST /api/v1/transfer
+{
+  "sourceCustomerId": "12345678",
+  "destinationCustomerId": "88888888",
+  "transferCurrency": "HKD",
+  "transferAmount": 10
+}
+HTTP 200
+{
+  "fromAccount": "12345678",
+  "transactionDatetime": "2024-05-06T19:40:54",
+  "type": "Transfer",
+  "currency": "HKD",
+  "amount": 10,
+  "toAccount": "88888888",
+  "status": "Success"
+}
+
+POST /api/v1/transfer
+{
+  "sourceCustomerId": "12345678",
+  "destinationCustomerId": "77777777",
+  "transferCurrency": "HKD",
+  "transferAmount": 10
+}
+HTTP 404
+{
+  "errorMessage": "Source account or destination account not found"
+}
+
+POST /api/v1/transfer
+{
+  "sourceCustomerId": "12345678",
+  "destinationCustomerId": "88888888",
+  "transferCurrency": "HKD",
+  "transferAmount": 1000001
+}
+HTTP 406
+{
+  "errorMessage": "Insufficient funds to transfer"
+}
+
+
+
+
+7. Testing
+
+Unit and integration testing are done accordingly. Every test cases or files use mocked data and objects to achieve desired result. 
+
+Database repository test cases primarily tests save and findById because these 2 methods were used in the project. 
+
+Controller test cases primarily tests the different HTTP response codes by mocking the request and response. One test case for each HTTP response code.
+
+Manual testing was done through Swagger UI for each API endpoint, ensuring the various scenarios are met. 
+
